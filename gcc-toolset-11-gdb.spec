@@ -457,7 +457,7 @@ tar xJf %{SOURCE5}
 tar xzf %{SOURCE7}
 (
  cd libipt-%{libipt_version}
-%patch1142 -p1
+%patch -P 1142 -p1
 )
 %endif
 
