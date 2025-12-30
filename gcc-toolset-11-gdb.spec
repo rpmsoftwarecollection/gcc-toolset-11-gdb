@@ -1,18 +1,4 @@
-# rpmbuild parameters:
-# --with testsuite: Run the testsuite (biarch if possible).  Default is without.
-# --with buildisa: Use %%{?_isa} for BuildRequires
-# --with asan: gcc -fsanitize=address
-# --without python: No python support.
-# --with profile: gcc -fprofile-generate / -fprofile-use: Before better
-#                 workload gets run it decreases the general performance now.
-# --define 'scl somepkgname': Independent packages by scl-utils-build.
-
-# Turn off the brp-python-bytecompile automagic
 %global _python_bytecompile_extra 0
-
-# Disable LTO until upstream fixes GDB's ODR woes.
-#%define _lto_cflags %{nil}
-
 %{?scl:%scl_package gdb}
 %{!?scl:
  %global pkg_name %{name}
@@ -21,54 +7,38 @@
  %global _root_libdir %{_libdir}
 }
 
-# If we're on Fedora or RHEL 9+, we will build the gdb-minimal package.
 %if 0%{?fedora} || 0%{?rhel} > 8
 %global _build_minimal 1
 %endif
 
 Name: gcc-toolset-11-gdb
 
-# Freeze it when GDB gets branched
 %global snapsrc    20200208
-# See timestamp of source gnulib installed into gnulib/ .
 %global snapgnulib 20200630
 %global tarname gdb-%{version}
 Version: 10.2
 
-# The release always contains a leading reserved number, start it at 1.
-# `upstream' is not a part of `name' to stay fully rpm dependencies compatible for the testing.
 Release: 5%{?dist}
 
 License: GPLv3+ and GPLv3+ with exceptions and GPLv2+ and GPLv2+ with exceptions and GPL+ and LGPLv2+ and LGPLv3+ and BSD and Public Domain and GFDL
-# Do not provide URL for snapshots as the file lasts there only for 2 days.
-# ftp://sourceware.org/pub/gdb/releases/FIXME{tarname}.tar.xz
-#Source: %{tarname}.tar.xz
 Source: ftp://sourceware.org/pub/gdb/releases/%{tarname}.tar.xz
 URL: https://gnu.org/software/gdb/
 
 BuildRequires: gcc-toolset-11-runtime, gcc-toolset-11-build
-# For our convenience
 %global gdb_src %{tarname}
 %global gdb_build build-%{_target_platform}
 %if 0%{?_build_minimal}
 %global gdb_build_minimal %{gdb_build}-minimal
 %endif # 0%{?_build_minimal}
 
-# error: Installed (but unpackaged) file(s) found: /usr/lib/debug/usr/bin/gdb-gdb.py
-# https://lists.fedoraproject.org/archives/list/devel@lists.fedoraproject.org/message/PBOJDOFMWTRV3ZOKNV5HN7IBX5EPHDHF/
 %undefine _debuginfo_subpackages
 
-# For DTS RHEL<=7 GDB it is better to use none than a Requires dependency.
 %if 0%{!?rhel:1} || 0%{?rhel} > 7
 Recommends: %{?scl_prefix}gcc-gdb-plugin%{?_isa}
 Recommends: dnf-command(debuginfo-install)
 %endif
 
 %if 0%{!?scl:1}
-# when manpages were moved from -headless to main
-# https://bugzilla.redhat.com/show_bug.cgi?id=1402554
-# theoretically should not be required due to versioned dependeny
-# below, but it cannot hurt either -- rdieter
 Conflicts: gdb-headless < 7.12-29
 
 Summary: A stub package for GNU source-level debugger
@@ -80,11 +50,7 @@ See package 'gdb-headless'.
 
 %package headless
 %endif
-
 Summary: A GNU source-level debugger for C, C++, Fortran, Go and other languages
-
-# Make sure we get rid of the old package gdb64, now that we have unified
-# support for 32-64 bits in one single 64-bit gdb.
 %ifarch ppc64
 Obsoletes: gdb64 < 5.3.91
 %endif
@@ -95,23 +61,15 @@ Obsoletes: gdb64 < 5.3.91
 %global have_inproctrace 1
 %endif
 
-# gdb-add-index cannot be run even for SCL package on RHEL<=6.
 %if 0%{!?rhel:1} || 0%{?rhel} > 6
-# eu-strip: -g recognizes .gdb_index as a debugging section. (#631997)
 Conflicts: elfutils < 0.149
 %endif
 
-# https://fedorahosted.org/fpc/ticket/43 https://fedorahosted.org/fpc/ticket/109
 Provides: bundled(libiberty) = %{snapsrc}
 Provides: bundled(gnulib) = %{snapgnulib}
-# The libraries in the top-level directory (libbfd, libopcodes,
-# libctf) are covered by the "bundled(binutils)" below.  See ticket
-# #109, as mentioned above.
 Provides: bundled(binutils) = %{snapsrc}
-# https://fedorahosted.org/fpc/ticket/130
 Provides: bundled(md5-gcc) = %{snapsrc}
 
-# https://fedoraproject.org/wiki/Packaging:Guidelines#BuildRequires_and_.25.7B_isa.7D
 %if 0%{?_with_buildisa:1} || 0%{?_with_testsuite:1}
 %global buildisa %{?_isa}
 %else
@@ -119,14 +77,12 @@ Provides: bundled(md5-gcc) = %{snapsrc}
 %endif
 
 %if 0%{!?rhel:1} || 0%{?rhel} > 7
-# https://bugzilla.redhat.com/show_bug.cgi?id=1209492
 Recommends: default-yama-scope
 %endif
 
 %if 0%{?el6:1}
 %global librpmver 1
 %else
-# FIXME: %elif does not work.
 %if 0%{?el7:1}
 %global librpmver 3
 %else
@@ -154,456 +110,223 @@ Recommends: %{librpmname}
 %endif
 
 %if 0%{?el6:1}
-# GDB C++11 requires devtoolset gcc.
 BuildRequires: %{?scl_prefix}gcc-c++
 %endif
 
 BuildRequires: autoconf
 
-# GDB patches have the format `gdb-<version>-bz<red-hat-bz-#>-<desc>.patch'.
-# They should be created using patch level 1: diff -up ./gdb (or gdb-6.3/gdb).
-
-#=
-#push=Should be pushed upstream.
-#fedora=Should stay as a Fedora patch.
-#fedoratest=Keep it in Fedora only as a regression test safety.
-
-# Cleanup any leftover testsuite processes as it may stuck mock(1) builds.
-#=push+jan
 Source2: gdb-orphanripper.c
 
-# Man page for gstack(1).
-#=push+jan
 Source3: gdb-gstack.man
 
-# /etc/gdbinit (from Debian but with Fedora compliant location).
-#=fedora
 Source4: gdbinit
 
-# libstdc++ pretty printers from GCC SVN.
 %global libstdcxxpython gdb-libstdc++-v3-python-8.1.1-20180626
-#=fedora
+
 Source5: %{libstdcxxpython}.tar.xz
 
-# Provide gdbtui for RHEL-5 and RHEL-6 as it is removed upstream (BZ 797664).
-#=fedora
 Source6: gdbtui
 
-# libipt: Intel Processor Trace Decoder Library
 %global libipt_version 2.0.4
-#=fedora
 Source7: v%{libipt_version}.tar.gz
-#=fedora
+
 Patch1142: v1.5-libipt-static.patch
 
-# Include the auto-generated file containing the "Patch:" directives.
-# See README.local-patches for more details.
-# Match the Fedora's version info.
-#=fedora
 Patch001: gdb-6.3-rh-testversion-20041202.patch
 
-# Add a wrapper script to GDB that implements pstack using the
-# --readnever option.
-#=push
 Patch002: gdb-6.3-gstack-20050411.patch
 
-# Test support of multiple destructors just like multiple constructors
-#=fedoratest
 Patch003: gdb-6.3-test-dtorfix-20050121.patch
 
-# Fix to support executable moving
-#=fedoratest
 Patch004: gdb-6.3-test-movedir-20050125.patch
 
-# Test sibling threads to set threaded watchpoints for x86 and x86-64
-#=fedoratest
 Patch005: gdb-6.3-threaded-watchpoints2-20050225.patch
 
-# Notify observers that the inferior has been created
-#=fedoratest
 Patch006: gdb-6.3-inferior-notification-20050721.patch
 
-# Verify printing of inherited members test
-#=fedoratest
 Patch007: gdb-6.3-inheritancetest-20050726.patch
 
-# Support TLS symbols (+`errno' suggestion if no pthread is found) (BZ 185337).
-#=push+jan: It should be replaced by Infinity project.
 Patch008: gdb-6.5-bz185337-resolve-tls-without-debuginfo-v2.patch
 
-# Fix TLS symbols resolving for shared libraries with a relative pathname.
-# The testsuite needs `gdb-6.5-tls-of-separate-debuginfo.patch'.
-#=fedoratest: One should recheck if it is really fixed upstream.
 Patch009: gdb-6.5-sharedlibrary-path.patch
 
-# Improved testsuite results by the testsuite provided by the courtesy of BEA.
-#=fedoratest: For upstream it should be rewritten as a dejagnu test, the test of no "??" was useful.
 Patch010: gdb-6.5-BEA-testsuite.patch
 
-# Testcase for deadlocking on last address space byte; for corrupted backtraces.
-#=fedoratest
 Patch011: gdb-6.5-last-address-space-byte-test.patch
 
-# Fix readline segfault on excessively long hand-typed lines.
-#=fedoratest
 Patch012: gdb-6.5-readline-long-line-crash-test.patch
 
-# Fix lockup on trampoline vs. its function lookup; unreproducible (BZ 218379).
-#=fedora
 Patch013: gdb-6.5-bz218379-solib-trampoline-lookup-lock-fix.patch
 
-# Find symbols properly at their original (included) file (BZ 109921).
-#=fedoratest
 Patch014: gdb-6.5-bz109921-DW_AT_decl_file-test.patch
 
-# Update PPC unwinding patches to their upstream variants (BZ 140532).
-#=fedoratest
 Patch015: gdb-6.3-bz140532-ppc-unwinding-test.patch
 
-# Testcase for exec() from threaded program (BZ 202689).
-#=fedoratest
 Patch016: gdb-6.3-bz202689-exec-from-pthread-test.patch
 
-# Testcase for PPC Power6/DFP instructions disassembly (BZ 230000).
-#=fedoratest
 Patch017: gdb-6.6-bz230000-power6-disassembly-test.patch
 
-# Allow running `/usr/bin/gcore' with provided but inaccessible tty (BZ 229517).
-#=fedoratest
 Patch018: gdb-6.6-bz229517-gcore-without-terminal.patch
 
-# Avoid too long timeouts on failing cases of "annota1.exp annota3.exp".
-#=fedoratest
 Patch019: gdb-6.6-testsuite-timeouts.patch
 
-# Support for stepping over PPC atomic instruction sequences (BZ 237572).
-#=fedoratest
 Patch020: gdb-6.6-bz237572-ppc-atomic-sequence-test.patch
 
-# Test kernel VDSO decoding while attaching to an i386 process.
-#=fedoratest
 Patch021: gdb-6.3-attach-see-vdso-test.patch
 
-# Test leftover zombie process (BZ 243845).
-#=fedoratest
 Patch022: gdb-6.5-bz243845-stale-testing-zombie-test.patch
 
-# New locating of the matching binaries from the pure core file (build-id).
-#=push+jan
 Patch023: gdb-6.6-buildid-locate.patch
 
-# Fix loading of core files without build-ids but with build-ids in executables.
-# Load strictly build-id-checked core files only if no executable is specified
-# (Jan Kratochvil, RH BZ 1339862).
-#=push+jan
 Patch024: gdb-6.6-buildid-locate-solib-missing-ids.patch
 
-#=push+jan
 Patch025: gdb-6.6-buildid-locate-rpm.patch
 
-# Fix displaying of numeric char arrays as strings (BZ 224128).
-#=fedoratest: But it is failing anyway, one should check the behavior more.
 Patch026: gdb-6.7-charsign-test.patch
 
-# Test PPC hiding of call-volatile parameter register.
-#=fedoratest
 Patch027: gdb-6.7-ppc-clobbered-registers-O2-test.patch
 
-# Testsuite fixes for more stable/comparable results.
-#=fedoratest
 Patch028: gdb-6.7-testsuite-stable-results.patch
 
-# Test ia64 memory leaks of the code using libunwind.
-#=fedoratest
 Patch029: gdb-6.5-ia64-libunwind-leak-test.patch
 
-# Test hiding unexpected breakpoints on intentional step commands.
-#=fedoratest
 Patch030: gdb-6.5-missed-trap-on-step-test.patch
 
-# Test gcore memory and time requirements for large inferiors.
-#=fedoratest
 Patch031: gdb-6.5-gcore-buffer-limit-test.patch
 
-# Test GCORE for shmid 0 shared memory mappings.
-#=fedoratest: But it is broken anyway, sometimes the case being tested is not reproducible.
 Patch032: gdb-6.3-mapping-zero-inode-test.patch
 
-# Test a crash on `focus cmd', `focus prev' commands.
-#=fedoratest
 Patch033: gdb-6.3-focus-cmd-prev-test.patch
 
-# Test various forms of threads tracking across exec() (BZ 442765).
-#=fedoratest
 Patch034: gdb-6.8-bz442765-threaded-exec-test.patch
 
-# Test a crash on libraries missing the .text section.
-#=fedoratest
 Patch035: gdb-6.5-section-num-fixup-test.patch
 
-# Fix resolving of variables at locations lists in prelinked libs (BZ 466901).
-#=fedoratest
 Patch036: gdb-6.8-bz466901-backtrace-full-prelinked.patch
 
-# New test for step-resume breakpoint placed in multiple threads at once.
-#=fedoratest
 Patch037: gdb-simultaneous-step-resume-breakpoint-test.patch
 
-# Fix GNU/Linux core open: Can't read pathname for load map: Input/output error.
-# Fix regression of undisplayed missing shared libraries caused by a fix for.
-#=fedoratest: It should be in glibc: libc-alpha: <20091004161706.GA27450@.*>
 Patch038: gdb-core-open-vdso-warning.patch
 
-# Workaround ccache making lineno non-zero for command-line definitions.
-#=fedoratest: ccache is rarely used and it is even fixed now.
 Patch039: gdb-ccache-workaround.patch
 
-# Testcase for "Do not make up line information" fix by Daniel Jacobowitz.
-#=fedoratest
 Patch040: gdb-lineno-makeup-test.patch
 
-# Test power7 ppc disassembly.
-#=fedoratest
 Patch041: gdb-ppc-power7-test.patch
 
-# Fix follow-exec for C++ programs (bugreported by Martin Stransky).
-#=fedoratest
 Patch042: gdb-archer-next-over-throw-cxx-exec.patch
 
-# Backport DWARF-4 support (BZ 601887, Tom Tromey).
-#=fedoratest
 Patch043: gdb-bz601887-dwarf4-rh-test.patch
 
-# Workaround librpm BZ 643031 due to its unexpected exit() calls (BZ 642879).
-#=push+jan
 Patch044: gdb-6.6-buildid-locate-rpm-librpm-workaround.patch
 
-# [delayed-symfile] Test a backtrace regression on CFIs without DIE (BZ 614604).
-#=fedoratest
 Patch045: gdb-test-bt-cfi-without-die.patch
 
-# Verify GDB Python built-in function gdb.solib_address exists (BZ # 634108).
-#=fedoratest
 Patch046: gdb-bz634108-solib_address.patch
 
-# New test gdb.arch/x86_64-pid0-core.exp for kernel PID 0 cores (BZ 611435).
-#=fedoratest
 Patch047: gdb-test-pid0-core.patch
 
-# [archer-tromey-delayed-symfile] New test gdb.dwarf2/dw2-aranges.exp.
-#=fedoratest
 Patch048: gdb-test-dw2-aranges.patch
 
-# [archer-keiths-expr-cumulative+upstream] Import C++ testcases.
-#=fedoratest
 Patch049: gdb-test-expr-cumulative-archer.patch
 
-# Fix regressions on C++ names resolving (PR 11734, PR 12273, Keith Seitz).
-#=fedoratest
 Patch050: gdb-physname-pr11734-test.patch
 
-# Fix regressions on C++ names resolving (PR 11734, PR 12273, Keith Seitz).
-#=fedoratest
 Patch051: gdb-physname-pr12273-test.patch
 
-# Test GDB opcodes/ disassembly of Intel Ivy Bridge instructions (BZ 696890).
-#=fedoratest
 Patch052: gdb-test-ivy-bridge.patch
 
-# Hack for proper PIE run of the testsuite.
-#=fedoratest
 Patch053: gdb-runtest-pie-override.patch
 
-# Workaround PR libc/14166 for inferior calls of strstr.
-#=fedoratest: Compatibility with RHELs (unchecked which ones).
 Patch054: gdb-glibc-strstr-workaround.patch
 
-# Include testcase for `Unable to see a variable inside a module (XLF)' (BZ 823789).
-#=fedoratest
 Patch055: gdb-rhel5.9-testcase-xlf-var-inside-mod.patch
 
-# Testcase for `Setting solib-absolute-prefix breaks vDSO' (BZ 818343).
-#=fedoratest
 Patch056: gdb-rhbz-818343-set-solib-absolute-prefix-testcase.patch
 
-# Import regression test for `gdb/findvar.c:417: internal-error:
-# read_var_value: Assertion `frame' failed.' (RH BZ 947564) from RHEL 6.5.
-#=fedoratest
 Patch057: gdb-rhbz947564-findvar-assertion-frame-failed-testcase.patch
 
-# Fix 'memory leak in infpy_read_memory()' (RH BZ 1007614)
-#=fedoratest
 Patch058: gdb-rhbz1007614-memleak-infpy_read_memory-test.patch
 
-# Fix 'gdb gives highly misleading error when debuginfo pkg is present,
-# but not corresponding binary pkg' (RH BZ 981154).
-#=push+jan
 Patch059: gdb-6.6-buildid-locate-misleading-warning-missing-debuginfo-rhbz981154.patch
 
-# Display Fortran strings in backtraces.
-#=fedoratest
 Patch060: gdb-fortran-frame-string.patch
 
-# Testcase for '[SAP] Recursive dlopen causes SAP HANA installer to
-# crash.' (RH BZ 1156192).
-#=fedoratest
 Patch061: gdb-rhbz1156192-recursive-dlopen-test.patch
 
-# Fix '`catch syscall' doesn't work for parent after `fork' is called'
-# (Philippe Waroquiers, RH BZ 1149205).
-#=fedoratest
 Patch062: gdb-rhbz1149205-catch-syscall-after-fork-test.patch
 
-# Fix 'backport GDB 7.4 fix to RHEL 6.6 GDB' [Original Sourceware bug
-# description: 'C++ (and objc): Internal error on unqualified name
-# re-set', PR 11657] (RH BZ 1186476).
-#=fedoratest
 Patch063: gdb-rhbz1186476-internal-error-unqualified-name-re-set-test.patch
 
-# Test 'info type-printers' Python error (RH BZ 1350436).
-#=fedoratest
 Patch064: gdb-rhbz1350436-type-printers-error.patch
 
-# Fix '[ppc64] and [s390x] wrong prologue skip on -O2 -g code' (Jan
-# Kratochvil, RH BZ 1084404).
-#=fedoratest
 Patch065: gdb-rhbz1084404-ppc64-s390x-wrong-prologue-skip-O2-g-3of3.patch
 
-# Force libncursesw over libncurses to match the includes (RH BZ 1270534).
-#=push+jan
 Patch066: gdb-fedora-libncursesw.patch
 
-# Test clflushopt instruction decode (for RH BZ 1262471).
-#=fedoratest
 Patch067: gdb-opcodes-clflushopt-test.patch
 
-# [SCL] Skip deprecated .gdb_index warning for Red Hat built files (BZ 953585).
-#=push+jan
 Patch068: gdb-6.6-buildid-locate-rpm-scl.patch
 
-# [aarch64] Fix hardware watchpoints (RH BZ 1261564).
-#=fedoratest
 Patch069: gdb-rhbz1261564-aarch64-hw-watchpoint-test.patch
 
-# Add messages suggesting more recent RHEL gdbserver (RH BZ 1321114).
-#=fedora
 Patch070: gdb-container-rh-pkg.patch
 
-# New test for Python "Cannot locate object file for block" (for RH BZ 1325795).
-#=fedoratest
 Patch071: gdb-rhbz1325795-framefilters-test.patch
 
-# [dts+el7] [x86*] Bundle linux_perf.h for libipt (RH BZ 1256513).
-#=fedora
 Patch072: gdb-linux_perf-bundle.patch
 
-# Fix gdb-headless /usr/bin/ executables (BZ 1390251).
-#
-# Also, make /usr/bin/gdb.minimal be the default GDB used, if it's
-# present.  For rationale, see:
-#
-#   https://fedoraproject.org/wiki/Changes/Minimal_GDB_in_buildroot
-#=fedora
 Patch073: gdb-libexec-add-index.patch
 
-# New testcase for: Fix <tab>-completion crash (Gary Benson, RH BZ 1398387).
-#=fedoratest
 Patch074: gdb-rhbz1398387-tab-crash-test.patch
 
-# [s390x] Backport arch12 instructions decoding (RH BZ 1553104).
-# =fedoratest
 Patch075: gdb-rhbz1553104-s390x-arch12-test.patch
 
-# Fix off-by-one error in ada_fold_name.patch (RH BZ 1905996)
-# Upstream patch proposal: https://sourceware.org/pipermail/gdb-patches/2020-December/173935.html
-# =fedoratest
 Patch076: gdb-rhbz1905996-fix-off-by-one-error-in-ada_fold_name.patch
 
-# Backport fix for libstdc++ assert when performing tab completion
-# (RH BZ 1912985).
 Patch077: gdb-rhbz1912985-libstdc++-assert.patch
 
-# Backport fix for frame_id_p assertion failure (RH BZ 1909902).
 Patch078: gdb-rhbz1909902-frame_id_p-assert-1.patch
 
-# Backport patch #2 which fixes a frame_id_p assertion failure (RH BZ 1909902).
 Patch079: gdb-rhbz1909902-frame_id_p-assert-2.patch
 
-# Backport change which fixes gdbserver testing hang on f34 and rawhide.
 Patch080: gdb-rhbz1941080-fix-gdbserver-hang.patch
 
-# Backport "Disable bracketed paste mode in GDB tests"
-# (Tom Tromey)
 Patch081: testing-custom-inputrc.patch
 
-# Backport "Save/restore file offset while reading notes in core file"
-# (Keith Seitz, RHBZ 1931344)
 Patch082: gdb-rhbz1931344-bfd_seek-elf_read_notes.patch
 
-# [fortran] Backport Andrew Burgess's commit which cleans up
-# array/string expression evaluation.
 Patch083: gdb-rhbz1964167-fortran-clean-up-array-expression-evaluation.patch
 
-# [fortran] Backport Andrew Burgess's commit which moves Fortran
-# expression handling to f-lang.c.
 Patch084: gdb-rhbz1964167-move-fortran-expr-handling.patch
 
-# [fortran] Backport Andrew Burgess's commit which eliminates undesirable
-# whitespace when printing arrays.
 Patch085: gdb-rhbz1964167-fortran-whitespace_array.patch
 
-# [fortran] Backport Andrew Burgess's commit which changes enum
-# range_type into a bit field enum.
 Patch086: gdb-rhbz1964167-convert-enum-range_type.patch
 
-# [fortran] Backport Andrew Burgess's commit which renames enum
-# range_type to enum range_flag.
 Patch087: gdb-rhbz1964167-fortran-range_type-to-range_flag.patch
 
-# [fortran] Backport Andrew Burgess's commit which adds support
-# for array strides in expressions.
 Patch088: gdb-rhbz1964167-fortran-array-strides-in-expressions.patch
 
-# [fortran] Backport Andrew Burgess's commit for Fortran array
-# slice support
 Patch089: gdb-rhbz1964167-fortran-array-slices-at-prompt.patch
 
-# [fortran] Backport Simon Marchi's commit which fixes a 32-bit build
-# problem in gdb/f-lang.c.
 Patch090: gdb-rhbz1964167-fortran-fix-type-format-mismatch-in-f-lang.c.patch
 
-# Backport of "Exclude debuginfo files from 'outside of ELF segments'
-# warning"  (Keith Seitz)
 Patch091: gdb-rhbz1898252-loadable-section-outside-ELF-segments.patch
 
-# Backport of "Correct recording of 'store on condition' insns"
-# Andreas Arnaz (RH BZ 1903374)
 Patch092: gdb-rhbz1903375-s390x-store-on-condition.patch
 
-# Backport "Fix crash when expanding partial symtabs with DW_TAG_imported_unit"
-# (Tom Tromey, gdb/27743)
 Patch093: gdb-gdb27743-psymtab-imported-unit.patch
 
-# Backport "[gdb/server] Don't overwrite fs/gs_base with -m32"
-# (Tom de Vries)
 Patch094: gdb-dont-overwrite-fsgsbase-m32.patch
 
-# Backport "Fix gdb.fortran/array-slices.exp with -m32"
-# (Tom de Vres)
 Patch095: gdb-testsuite26997-fix-array-slices-m32.patch
 
-# Backport "adjust gdb.python/flexible-array-member.exp expected pattern"
-# (Simon Marchi)
 Patch096: gdb-flexible-array-member-expected-pattern.patch
 
-# Backport "Fix avx512 -m32 support in gdbserver"
-# (Tom de Vries, RHBZ 2019936)
 Patch097: gdb-rhbz2019936-gdbserver-avx512-m32.patch
 
 %if 0%{!?rhel:1} || 0%{?rhel} > 6
-# RL_STATE_FEDORA_GDB would not be found for:
-# Patch642: gdb-readline62-ask-more-rh.patch
-# --with-system-readline
 BuildRequires: readline-devel%{buildisa} >= 6.2-4
 %endif # 0%{!?rhel:1} || 0%{?rhel} > 6
 
@@ -612,7 +335,6 @@ BuildRequires: expat-devel%{buildisa}
 %if 0%{!?rhel:1} || 0%{?rhel} > 6
 BuildRequires: xz-devel%{buildisa}
 %endif
-# dlopen() no longer makes rpm-libsFIXME{?_isa} (it's .so) a mandatory dependency.
 BuildRequires: rpm-devel%{buildisa}
 BuildRequires: zlib-devel%{buildisa} libselinux-devel%{buildisa}
 %if 0%{!?_without_python:1}
@@ -623,18 +345,13 @@ BuildRequires: python-devel%{buildisa}
 BuildRequires: python3-devel%{buildisa}
 %endif
 %if 0%{?rhel:1} && 0%{?rhel} <= 7
-# Temporarily before python files get moved to libstdc++.rpm
-# libstdc++%{bits_other} is not present in Koji, the .spec script generating
-# gdb/python/libstdcxx/ also does not depend on the %{bits_other} files.
 BuildRequires: libstdc++%{buildisa}
 %endif # 0%{?rhel:1} && 0%{?rhel} <= 7
 %endif # 0%{!?_without_python:1}
-# gdb-doc in PDF, see: https://bugzilla.redhat.com/show_bug.cgi?id=919891#c10
 BuildRequires: texinfo-tex
 %if 0%{!?rhel:1} || 0%{?rhel} > 6
 BuildRequires: texlive-collection-latexrecommended
 %endif
-# Permit rebuilding *.[0-9] files even if they are distributed in gdb-*.tar:
 BuildRequires: /usr/bin/pod2man
 %if 0%{!?rhel:1} || 0%{?rhel} > 7
 BuildRequires: libbabeltrace-devel%{buildisa}
@@ -654,9 +371,6 @@ BuildRequires: libipt-devel%{buildisa}
 %endif
 %endif
 %if 0%{!?rhel:1} || 0%{?rhel} > 6
-# See https://bugzilla.redhat.com/show_bug.cgi?id=1593280
-# DTS RHEL-6 has mpfr-2 while GDB requires mpfr-3 on RHEL-7, RHEL-8, and
-# Fedora < 32, and mpfr-4 on Fedora 32+ and RHEL-9+.
 BuildRequires: mpfr-devel%{buildisa}
 %endif
 BuildRequires: source-highlight-devel
@@ -665,12 +379,10 @@ BuildRequires: xxhash-devel
 %endif
 BuildRequires: elfutils-debuginfod-client-devel
 
-# Workaround for missing boost-devel dependency (rhbz 1718480)
 BuildRequires: boost-devel
 
 %if 0%{?_with_testsuite:1}
 
-# Ensure the devel libraries are installed for both multilib arches.
 %global bits_local %{?_isa}
 %global bits_other %{?_isa}
 %ifarch s390x
@@ -688,7 +400,6 @@ BuildRequires: boost-devel
 %endif #!s390x
 
 BuildRequires: sharutils dejagnu
-# gcc-objc++ is not covered by the GDB testsuite.
 BuildRequires: gcc gcc-c++ gcc-gfortran
 %if 0%{!?rhel:1} || 0%{?rhel} < 8
 BuildRequires: gcc-objc
@@ -701,7 +412,6 @@ BuildRequires: gcc-java libgcj%{bits_local} libgcj%{bits_other}
 # for gcc-java linkage:
 BuildRequires: zlib-devel%{bits_local} zlib-devel%{bits_other}
 %endif
-# Exception for RHEL<=7
 %ifarch aarch64
 %if 0%{!?rhel:1}
 BuildRequires: gcc-go
@@ -713,13 +423,9 @@ BuildRequires: gcc-go
 BuildRequires: libgo-devel%{bits_local} libgo-devel%{bits_other}
 %endif
 %endif
-# archer-sergiodj-stap-patch-split
 BuildRequires: systemtap-sdt-devel
 %if 0%{?rhel:1} && 0%{?rhel} <= 7
-# Copied from prelink-0.4.2-3.fc13.
-# Prelink is not yet ported to ppc64le.
 %ifarch %{ix86} alpha sparc sparcv9 sparc64 s390 s390x x86_64 ppc ppc64
-# Prelink is broken on sparcv9/sparc64.
 %ifnarch sparc sparcv9 sparc64
 BuildRequires: prelink
 %endif
@@ -729,13 +435,10 @@ BuildRequires: prelink
 BuildRequires: opencl-headers ocl-icd-devel%{bits_local} ocl-icd-devel%{bits_other}
 %endif
 %if 0%{!?rhel:1}
-# Fedora arm+ppc64le do not yet have fpc built.
 %ifnarch %{arm} ppc64le
 BuildRequires: fpc
 %endif
 %endif
-# Copied from: gcc-6.2.1-1.fc26
-# Exception for RHEL<=7
 %ifarch s390x
 %if 0%{!?rhel:1}
 BuildRequires: gcc-gnat
@@ -760,9 +463,6 @@ BuildRequires: libquadmath%{bits_local} libquadmath%{bits_other}
 %endif
 %endif
 BuildRequires: glibc-static%{bits_local}
-# multilib glibc-static is open Bug 488472:
-#BuildRequires: glibc-static%{bits_other}
-# Exception for RHEL<=7
 %ifarch s390x
 BuildRequires: valgrind%{bits_local}
 %if 0%{!?rhel:1} || 0%{?rhel} > 7
@@ -779,12 +479,11 @@ BuildRequires: rust
 %endif
 
 BuildRequires: %{?scl_prefix}elfutils-debuginfod
-%endif # 0%{?_with_testsuite:1}
+%endif
 BuildRequires: make
 
 %{?scl:Requires:%scl_runtime}
 
-# FIXME: The text needs to be duplicated to prevent 2 empty heading lines.
 %if 0%{!?scl:1}
 %description headless
 GDB, the GNU debugger, allows you to debug programs written in C, C++,
@@ -800,7 +499,6 @@ and printing their data.
 %if 0%{?_build_minimal}
 %package minimal
 Summary: A GNU source-level debugger for C, C++, Fortran, Go and other languages (minimal version)
-# gdb-add-index is shared with gdb-headless and it must be from same version
 Conflicts: %{name}-headless < %{version}-%{release}
 Conflicts: %{name}-headless > %{version}-%{release}
 
@@ -811,7 +509,7 @@ and printing their data.
 
 This package provides a minimal version of GDB, tailored to be used by
 the Fedora buildroot.  It should probably not be used by end users.
-%endif # 0%{?_build_minimal}
+%endif
 
 %package gdbserver
 Summary: A standalone server for GDB (the GNU source-level debugger)
@@ -829,9 +527,6 @@ Summary: Documentation for GDB (the GNU source-level debugger)
 License: GFDL
 BuildArch: noarch
 %if 0%{?scl:1}
-# As of F-28, packages won't need to call /sbin/install-info by hand
-# anymore.  We make an exception for DTS here.
-# https://lists.fedoraproject.org/archives/list/devel@lists.fedoraproject.org/thread/MP2QVJZBOJZEOQO2G7UB2HLXKXYPF2G5/
 Requires(post): /sbin/install-info
 Requires(preun): /sbin/install-info
 %endif
@@ -847,7 +542,6 @@ This package provides INFO, HTML and PDF user manual for GDB.
 %setup -q -n %{gdb_src}
 
 %if 0%{?rhel:1} && 0%{?rhel} <= 7
-# libstdc++ pretty printers.
 tar xJf %{SOURCE5}
 %endif # 0%{?rhel:1} && 0%{?rhel} <= 7
 
@@ -859,17 +553,10 @@ tar xzf %{SOURCE7}
 )
 %endif
 
-# Files have `# <number> <file>' statements breaking VPATH / find-debuginfo.sh .
 (cd gdb;rm -fv $(perl -pe 's/\\\n/ /' <Makefile.in|sed -n 's/^YYFILES = //p'))
 
-# *.info* is needlessly split in the distro tar; also it would not get used as
-# we build in %{gdb_build}, just to be sure.
 find -name "*.info*"|xargs rm -f
 
-# Apply patches defined on _gdb.spec.Patch.include
-
-# Include the auto-generated "%patch" directives.
-# See README.local-patches for more details.
 %patch -P 001 -p1
 %patch -P 002 -p1
 %patch -P 003 -p1
@@ -968,8 +655,7 @@ find -name "*.info*"|xargs rm -f
 %patch -P 096 -p1
 %patch -P 097 -p1
 
-# The above patches twiddle a .m4 file for configure, so update the affected
-# configure files
+
 pushd libiberty
 autoconf -f
 popd
