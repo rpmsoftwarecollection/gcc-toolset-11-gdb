@@ -113,7 +113,7 @@ Recommends: %{librpmname}
 BuildRequires: %{?scl_prefix}gcc-c++
 %endif
 
-BuildRequires: autoconf
+BuildRequires: autoconf269
 
 Source2: gdb-orphanripper.c
 
@@ -657,10 +657,10 @@ find -name "*.info*"|xargs rm -f
 
 
 pushd libiberty
-autoconf -f
+autoconf-2.69 -f
 popd
 pushd intl
-autoconf -f
+autoconf-2.69 -f
 popd
 
 find -name "*.orig" | xargs rm -f
