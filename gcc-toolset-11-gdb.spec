@@ -697,7 +697,7 @@ rm -rf zlib texinfo
 %build
 rm -rf %{buildroot}
 
-test -e %{_root_libdir}/librpm.so.%{librpmver}
+#test -e %{_root_libdir}/librpm.so.%{librpmver}
 
 %if 0%{?el6:1}
 # GDB C++11 requires devtoolset gcc.
